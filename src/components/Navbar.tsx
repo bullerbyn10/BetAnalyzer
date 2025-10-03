@@ -75,9 +75,6 @@ export function Navbar({ currentPage, onNavigate, user }: NavbarProps) {
                 <Badge variant="outline" className="text-green-400 border-green-400">
                   Premium Analytics
                 </Badge>
-                <Badge variant="outline" className="text-blue-400 border-blue-400">
-                  Live Chat
-                </Badge>
               </div>
               <Button variant="outline" size="sm" onClick={() => onNavigate('auth')}>
                 Login

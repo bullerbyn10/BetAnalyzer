@@ -1,5 +1,5 @@
 import { Card } from './ui/card'
-import { BarChart3, TrendingUp, Target, Shield, Mail, MessageCircle, FileText, Github } from 'lucide-react'
+import { BarChart3, TrendingUp, Target, Shield, Mail, FileText } from 'lucide-react'
 import { Separator } from './ui/separator'
 
 interface HomePageProps {
@@ -13,7 +13,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
       <section className="container mx-auto px-6 py-16">
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-4">
-            <h2 className="text-3xl font-bold text-[40px]">Welcome to BetAnalyzer</h2>
+            <h2 className="text-3xl font-bold text-[48px]">Welcome to BetAnalyzer</h2>
             <p className="text-lg text-muted-foreground">
               Our platform is built for bettors who understand that long-term success requires more than gut feeling. 
               We provide the analytical tools and data you need to make evidence-based decisions.
@@ -78,20 +78,8 @@ export function HomePage({ onNavigate }: HomePageProps) {
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm">
                   <Mail className="w-4 h-4 text-muted-foreground" />
-                  <a href="mailto:contact@betanalyzer.com" className="text-muted-foreground hover:text-foreground transition-colors">
-                    contact@betanalyzer.com
-                  </a>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <MessageCircle className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    Support available 24/7
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Github className="w-4 h-4 text-muted-foreground" />
-                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                    GitHub Repository
+                  <a href="mailto:Erik@betanalyser.se" className="text-muted-foreground hover:text-foreground transition-colors">
+                    Erik@betanalyser.se
                   </a>
                 </div>
               </div>
@@ -105,12 +93,6 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   <FileText className="w-4 h-4 text-muted-foreground" />
                   <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                     Documentation
-                  </a>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                    API Reference
                   </a>
                 </div>
                 <div className="flex items-center gap-3 text-sm">

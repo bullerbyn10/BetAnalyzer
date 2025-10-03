@@ -10,7 +10,21 @@ import { Slider } from './ui/slider'
 import { Badge } from './ui/badge'
 import { Switch } from './ui/switch'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, ReferenceLine, Line, ComposedChart } from 'recharts'
-import { ArrowRight, TrendingUp } from 'lucide-react'
+import { ArrowRight, TrendingUp, X } from 'lucide-react'
+import { TeamCombobox } from './TeamCombobox'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from './ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from './ui/popover'
 
 interface MatchData {
   team: string
@@ -117,8 +131,9 @@ export function OddsAnalysis() {
   const [teamBMatches, setTeamBMatches] = useState<number[]>([24])
   const [useOutlierSmoothing, setUseOutlierSmoothing] = useState<boolean>(false)
   const [smoothingStrength, setSmoothingStrength] = useState<number[]>([2])
+  const [excludedMatches, setExcludedMatches] = useState<Set<string>>(new Set())
 
-  const leagues = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Championship"]
+  const leagues = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Serie B", "Championship"]
 
   useEffect(() => {
     if (!selectedLeague) {
@@ -145,6 +160,14 @@ export function OddsAnalysis() {
       const uniqueSeasons = [...new Set(seasonsData?.map(r => r.season))].sort().reverse()
       setAvailableSeasons(uniqueSeasons)
       setSelectedSeason('all')
+
+      // DEBUG: Log Championship seasons
+      if (selectedLeague === 'Championship') {
+        console.log('=== CHAMPIONSHIP SEASONS ===')
+        console.log('Available seasons:', uniqueSeasons)
+        console.log('Total seasons:', uniqueSeasons.length)
+        console.log('============================')
+      }
     }
 
     fetchAvailableSeasons()
@@ -179,22 +202,29 @@ export function OddsAnalysis() {
       const uniqueTeams = [...new Set(teamsData?.map(r => r.team))]
       setTeams(uniqueTeams)
 
-      let avgQuery = supabase
+      // Always fetch league averages with season='all' since averages are now calculated across all matches
+      const { data: avgData, error: avgError } = await supabase
         .from('league_averages')
         .select('*')
         .eq('league', selectedLeague)
-
-      if (selectedSeason && selectedSeason !== 'all') {
-        avgQuery = avgQuery.eq('season', selectedSeason)
-      }
-
-      const { data: avgData, error: avgError } = await avgQuery
+        .eq('season', 'all')
 
       if (avgError) {
         console.error('Error fetching league averages:', avgError)
         setLeagueAverages([])
       } else {
         setLeagueAverages(avgData || [])
+      }
+
+      // DEBUG: Log Championship data
+      if (selectedLeague === 'Championship') {
+        console.log('=== CHAMPIONSHIP DEBUG INFO ===')
+        console.log('📊 Teams found:', uniqueTeams.length)
+        console.log('Teams:', uniqueTeams)
+        console.log('📈 League averages found:', avgData?.length || 0)
+        console.log('League averages data:', avgData)
+        console.log('🔍 Selected season:', selectedSeason)
+        console.log('================================')
       }
     }
 
@@ -218,17 +248,12 @@ export function OddsAnalysis() {
       
       if (uniqueOpponents.length > 0) {
         try {
-          let query = supabase
+          // Fetch team averages against (no season column in this table - it contains all-time averages)
+          const { data, error } = await supabase
             .from('team_averages_against')
             .select('team, avg_against')
             .eq('stat_type', statCategory)
             .in('team', uniqueOpponents)
-
-          if (selectedSeason && selectedSeason !== 'all') {
-            query = query.eq('season', selectedSeason)
-          }
-
-          const { data, error } = await query
 
           if (error) {
             console.error('Error fetching average against data:', error)
@@ -278,6 +303,17 @@ export function OddsAnalysis() {
           }
 
           setAverageAgainstData(lookupMap)
+
+          // DEBUG: Log Championship averages against data
+          if (selectedLeague === 'Championship') {
+            console.log('=== CHAMPIONSHIP AVG AGAINST DATA ===')
+            console.log('📊 Stat category:', statCategory)
+            console.log('Opponents:', uniqueOpponents)
+            console.log('Averages against from DB:', data?.length || 0)
+            console.log('Missing opponents:', missingOpponents)
+            console.log('Final lookup map:', lookupMap)
+            console.log('======================================')
+          }
         } catch (error) {
           console.error('Error in fetchAverageAgainstData:', error)
           setAverageAgainstData({})
@@ -286,7 +322,7 @@ export function OddsAnalysis() {
     }
 
     fetchAvgAgainstData()
-  }, [showAverageAgainst, displayOption, teamAData, numberOfMatches, statCategory, selectedSeason, selectedLeague])
+  }, [showAverageAgainst, displayOption, teamAData, numberOfMatches, statCategory, selectedSeason, leagueAverages])
 
   useEffect(() => {
     if (!selectedTeamA || !selectedTeamB) {
@@ -336,6 +372,22 @@ export function OddsAnalysis() {
       } else {
         setTeamBData(dataB || [])
       }
+
+      // DEBUG: Log Championship match data
+      if (selectedLeague === 'Championship') {
+        console.log('=== CHAMPIONSHIP MATCH DATA ===')
+        console.log('🏟️ Team A:', selectedTeamA)
+        console.log('Team A matches found:', dataA?.length || 0)
+        if (dataA && dataA.length > 0) {
+          console.log('Sample Team A match:', dataA[0])
+        }
+        console.log('🏟️ Team B:', selectedTeamB)
+        console.log('Team B matches found:', dataB?.length || 0)
+        if (dataB && dataB.length > 0) {
+          console.log('Sample Team B match:', dataB[0])
+        }
+        console.log('================================')
+      }
     }
 
     fetchMatches()
@@ -352,6 +404,53 @@ export function OddsAnalysis() {
     }
   }, [homeAwayFilter])
 
+  // Get available matches for exclusion (only from current chart data)
+  const getAvailableMatches = useMemo(() => {
+    if (!teamAData.length) return []
+    
+    // First: Get latest N matches, THEN filter by home/away
+    const latestMatches = teamAData
+      .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+      .slice(0, numberOfMatches[0])
+    
+    const filtered = filterMatches(latestMatches)
+      .filter(match => {
+        const matchId = `${match.match_date}_${match.opponent}`
+        return !excludedMatches.has(matchId)
+      })
+    
+    return filtered.map(match => ({
+      id: `${match.match_date}_${match.opponent}`,
+      label: `${new Date(match.match_date).toLocaleDateString('sv-SE')} vs ${match.opponent}`,
+      date: match.match_date,
+      opponent: match.opponent
+    }))
+  }, [teamAData, numberOfMatches, homeAwayFilter, excludedMatches])
+
+  const handleExcludeMatch = (matchId: string) => {
+    setExcludedMatches(prev => new Set([...prev, matchId]))
+  }
+
+  const handleIncludeMatch = (matchId: string) => {
+    setExcludedMatches(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(matchId)
+      return newSet
+    })
+  }
+
+  const getExcludedMatchesDisplay = useMemo(() => {
+    if (!teamAData.length || excludedMatches.size === 0) return []
+    
+    return Array.from(excludedMatches).map(matchId => {
+      const [date, opponent] = matchId.split('_')
+      return {
+        id: matchId,
+        label: `${new Date(date).toLocaleDateString('sv-SE')} vs ${opponent}`
+      }
+    })
+  }, [excludedMatches, teamAData])
+
   const buildChartSeries = (
     matchesA: MatchData[], 
     matchesB: MatchData[], 
@@ -359,13 +458,23 @@ export function OddsAnalysis() {
     displayOption: DisplayOption, 
     N: number
   ): ChartData[] => {
-    const sortedMatchesA = filterMatches(matchesA)
+    // First: Get the latest N matches (sorted by date)
+    const latestMatchesA = matchesA
       .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
       .slice(0, N)
     
-    const sortedMatchesB = filterMatches(matchesB)
+    // Then: Apply home/away filter and exclude matches
+    const sortedMatchesA = filterMatches(latestMatchesA).filter(match => {
+      const matchId = `${match.match_date}_${match.opponent}`
+      return !excludedMatches.has(matchId)
+    })
+    
+    // Same for Team B: first get latest N, then filter
+    const latestMatchesB = matchesB
       .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
       .slice(0, N)
+    
+    const sortedMatchesB = filterMatches(latestMatchesB)
 
     let series: ChartData[] = []
 
@@ -395,10 +504,8 @@ export function OddsAnalysis() {
         break
     }
 
-    while (series.length < N) {
-      series.push({ match_date: '', opponent: '', value: 0 })
-    }
-
+    // Don't pad with empty data - just return what we have
+    // This prevents empty bars when home/away filtering reduces the dataset
     return series.reverse()
   }
 
@@ -476,7 +583,7 @@ export function OddsAnalysis() {
 
   const chartData = useMemo(() => {
     return prepareChartData()
-  }, [teamAData, teamBData, statCategory, displayOption, numberOfMatches, averageAgainstData, filterMatches, useOutlierSmoothing, smoothingStrength])
+  }, [teamAData, teamBData, statCategory, displayOption, numberOfMatches, averageAgainstData, homeAwayFilter, useOutlierSmoothing, smoothingStrength, excludedMatches])
 
   const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[]; label?: string }) => {
     if (active && payload && payload.length) {
@@ -705,6 +812,16 @@ export function OddsAnalysis() {
 
   const calculateTrueOdds = () => {
     if (!selectedTeamA || !selectedTeamB || leagueAverages.length === 0 || teamAData.length === 0 || teamBData.length === 0) {
+      // DEBUG: Log why odds calculation failed for Championship
+      if (selectedLeague === 'Championship') {
+        console.log('=== CHAMPIONSHIP ODDS CALC FAILED ===')
+        console.log('selectedTeamA:', selectedTeamA)
+        console.log('selectedTeamB:', selectedTeamB)
+        console.log('leagueAverages length:', leagueAverages.length)
+        console.log('teamAData length:', teamAData.length)
+        console.log('teamBData length:', teamBData.length)
+        console.log('=====================================')
+      }
       return { overOdds: 0, underOdds: 0, expectedValue: 0 }
     }
 
@@ -717,9 +834,17 @@ export function OddsAnalysis() {
       return matches
     }
 
-    const filteredTeamAMatches = filterMatches(teamAData).slice(0, numberOfMatches[0])
+    // First: Get the latest N matches (sorted by date), THEN filter by home/away
+    const latestTeamAMatches = teamAData
+      .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+      .slice(0, numberOfMatches[0])
+    const filteredTeamAMatches = filterMatches(latestTeamAMatches)
+    
     const teamBMatchCount = useCustomTeamBMatches ? teamBMatches[0] : numberOfMatches[0]
-    const filteredTeamBMatches = filterMatches(teamBData).slice(0, teamBMatchCount)
+    const latestTeamBMatches = teamBData
+      .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+      .slice(0, teamBMatchCount)
+    const filteredTeamBMatches = filterMatches(latestTeamBMatches)
     
     if (filteredTeamAMatches.length === 0 || filteredTeamBMatches.length === 0) {
       return { overOdds: 0, underOdds: 0, expectedValue: 0 }
@@ -781,8 +906,29 @@ export function OddsAnalysis() {
         return sum + teamBForValues[index] + teamBAgainstValues[index]
       }, 0) / filteredTeamBMatches.length
       
-      const leagueAvgRow = leagueAverages.find(row => row.stat_type === statCategory)  
-      const weightedAvg = leagueAvgRow?.league_average || 0
+      const leagueAvgRow = leagueAverages.find(row => row.stat_type === statCategory)
+      // Use the appropriate league average based on home/away filter
+      let weightedAvg = 0
+      let usedColumn = ''
+      if (homeAwayFilter === 'home') {
+        weightedAvg = leagueAvgRow?.home_average || 0
+        usedColumn = 'home_average'
+      } else if (homeAwayFilter === 'away') {
+        weightedAvg = leagueAvgRow?.away_average || 0
+        usedColumn = 'away_average'
+      } else {
+        weightedAvg = leagueAvgRow?.league_average || 0
+        usedColumn = 'league_average'
+      }
+      
+      // DEBUG: Log which league average column is being used (Combined mode)
+      console.log('🎯 LEAGUE AVERAGE DEBUG (COMBINED)')
+      console.log('Home/Away Filter:', homeAwayFilter)
+      console.log('Using Column:', usedColumn)
+      console.log('Value Retrieved:', weightedAvg)
+      console.log('Stat Category:', statCategory)
+      console.log('Full Row Data:', leagueAvgRow)
+      console.log('------------------------')
       
       if (!weightedAvg || weightedAvg === 0) {
         return { overOdds: 0, underOdds: 0, expectedValue: 0 }
@@ -797,9 +943,40 @@ export function OddsAnalysis() {
     }
 
     const leagueAvgRow = leagueAverages.find(row => row.stat_type === statCategory)
-    const weightedAvg = leagueAvgRow?.league_average || 0
+    // Use the appropriate league average based on home/away filter
+    let weightedAvg = 0
+    let usedColumn = ''
+    if (homeAwayFilter === 'home') {
+      weightedAvg = leagueAvgRow?.home_average || 0
+      usedColumn = 'home_average'
+    } else if (homeAwayFilter === 'away') {
+      weightedAvg = leagueAvgRow?.away_average || 0
+      usedColumn = 'away_average'
+    } else {
+      weightedAvg = leagueAvgRow?.league_average || 0
+      usedColumn = 'league_average'
+    }
+    
+    // DEBUG: Log which league average column is being used
+    console.log('🎯 LEAGUE AVERAGE DEBUG')
+    console.log('Home/Away Filter:', homeAwayFilter)
+    console.log('Using Column:', usedColumn)
+    console.log('Value Retrieved:', weightedAvg)
+    console.log('Stat Category:', statCategory)
+    console.log('Full Row Data:', leagueAvgRow)
+    console.log('------------------------')
     
     if (!weightedAvg || weightedAvg === 0) {
+      // DEBUG: Log missing league average for Championship
+      if (selectedLeague === 'Championship') {
+        console.log('=== CHAMPIONSHIP LEAGUE AVG MISSING ===')
+        console.log('Stat category:', statCategory)
+        console.log('League averages:', leagueAverages)
+        console.log('Looking for stat_type:', statCategory)
+        console.log('Found league avg row:', leagueAvgRow)
+        console.log('Weighted avg:', weightedAvg)
+        console.log('=======================================')
+      }
       return { overOdds: 0, underOdds: 0, expectedValue: 0 }
     }
 
@@ -810,6 +987,18 @@ export function OddsAnalysis() {
 
     const overOdds = probabilityToOdds(overProbability)
     const underOdds = probabilityToOdds(underProbability)
+
+    // DEBUG: Log successful odds calculation for Championship
+    if (selectedLeague === 'Championship') {
+      console.log('=== CHAMPIONSHIP ODDS SUCCESS ===')
+      console.log('Team A avg:', teamAAvg)
+      console.log('Team B avg against:', teamBAvgAgainst)
+      console.log('League weighted avg:', weightedAvg)
+      console.log('Expected value:', expectedValue)
+      console.log('Over odds:', overOdds)
+      console.log('Under odds:', underOdds)
+      console.log('=================================')
+    }
 
     return { 
       overOdds, 
@@ -1046,34 +1235,24 @@ export function OddsAnalysis() {
 
             <div className="space-y-1">
               <Label className="text-sm text-white">Select Team (Team A)</Label>
-              <Select value={selectedTeamA} onValueChange={setSelectedTeamA}>
-                <SelectTrigger className="text-sm h-8">
-                  <SelectValue placeholder="Pick a team" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team} value={team}>
-                      {team}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TeamCombobox
+                teams={teams}
+                value={selectedTeamA}
+                onValueChange={setSelectedTeamA}
+                placeholder="Pick a team"
+                disabled={teams.length === 0}
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-sm text-white">Select Team (Team B)</Label>
-              <Select value={selectedTeamB} onValueChange={setSelectedTeamB}>
-                <SelectTrigger className="text-sm h-8">
-                  <SelectValue placeholder="Pick a opponent" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.filter(team => team !== selectedTeamA).map((team) => (
-                    <SelectItem key={team} value={team}>
-                      {team}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TeamCombobox
+                teams={teams.filter(team => team !== selectedTeamA)}
+                value={selectedTeamB}
+                onValueChange={setSelectedTeamB}
+                placeholder="Pick a opponent"
+                disabled={teams.length === 0}
+              />
             </div>
 
             <Button 
@@ -1557,10 +1736,79 @@ export function OddsAnalysis() {
                 )}
               </div>
             </div>
-            
-            <div className="border-t pt-2">
-              <div className="text-xs text-muted-foreground">
-                Toggle chart overlays to enhance data visualization
+
+            <div className="border-t pt-3">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-white">
+                    Exclude Matches
+                  </Label>
+                </div>
+                
+                <div className="space-y-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between text-xs h-8"
+                        disabled={getAvailableMatches.length === 0}
+                      >
+                        {getAvailableMatches.length > 0 ? 'Select match to exclude' : 'No matches available'}
+                        <ArrowRight className="ml-2 h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search matches..." className="h-9" />
+                        <CommandList className="max-h-[200px]">
+                          <CommandEmpty>No matches found.</CommandEmpty>
+                          <CommandGroup>
+                            {getAvailableMatches.map((match) => (
+                              <CommandItem
+                                key={match.id}
+                                value={match.label}
+                                onSelect={() => {
+                                  handleExcludeMatch(match.id)
+                                }}
+                                className="text-xs"
+                              >
+                                {match.label}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  {getExcludedMatchesDisplay.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs text-muted-foreground">Excluded ({excludedMatches.size}):</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {getExcludedMatchesDisplay.map((match) => (
+                          <Badge
+                            key={match.id}
+                            variant="secondary"
+                            className="text-xs px-2 py-0.5 flex items-center gap-1"
+                          >
+                            <span className="max-w-[150px] truncate">{match.label}</span>
+                            <button
+                              onClick={() => handleIncludeMatch(match.id)}
+                              className="ml-1 hover:text-destructive transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="text-xs text-muted-foreground">
+                    Excluded matches are removed from all calculations
+                  </div>
+                </div>
               </div>
             </div>
           </div>
