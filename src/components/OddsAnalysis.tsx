@@ -721,21 +721,42 @@ export function OddsAnalysis() {
   }
 
   const getReferenceLineMax = () => {
-    switch (statCategory) {
-      case 'goals':
-        return 8
-      case 'shots':
-        return 30
-      case 'shots_on_target':
-        return 15
-      case 'corners':
-        return 20
-      case 'yellow':
-        return 10
-      case 'red':
-        return 5
-      default:
-        return 30
+    // Different max values for combined vs individual display options
+    if (displayOption === 'combined') {
+      switch (statCategory) {
+        case 'goals':
+          return 10
+        case 'shots':
+          return 35
+        case 'shots_on_target':
+          return 20
+        case 'corners':
+          return 25
+        case 'yellow':
+          return 12
+        case 'red':
+          return 6
+        default:
+          return 35
+      }
+    } else {
+      // For "forA" and "againstA" display options
+      switch (statCategory) {
+        case 'goals':
+          return 6
+        case 'shots':
+          return 26
+        case 'shots_on_target':
+          return 12
+        case 'corners':
+          return 15
+        case 'yellow':
+          return 8
+        case 'red':
+          return 4
+        default:
+          return 26
+      }
     }
   }
 
@@ -1423,6 +1444,7 @@ export function OddsAnalysis() {
                     left: 20,
                     bottom: 40,
                   }}
+                  key={`${selectedTeamA}-${selectedTeamB}-${displayOption}-${homeAwayFilter}`}
                 >
                   <defs>
                     <linearGradient id="movingAverageGradient" x1="0" y1="0" x2="1" y2="0">
@@ -1468,6 +1490,9 @@ export function OddsAnalysis() {
                     onMouseEnter={(data, index) => setHoveredIndex(index)}
                     onMouseLeave={() => setHoveredIndex(null)}
                     shape={CustomBar}
+                    isAnimationActive={true}
+                    animationDuration={350}
+                    animationEasing="ease-out"
                   >
                     <LabelList 
                       content={(props: any) => <CustomBarLabel {...props} payload={props.payload} />}
@@ -1485,6 +1510,9 @@ export function OddsAnalysis() {
                       dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
                       activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 2, fill: '#1e40af' }}
                       strokeDasharray="0"
+                      isAnimationActive={true}
+                      animationDuration={350}
+                      animationEasing="ease-out"
                     />
                   )}
                   {showAverageAgainst && displayOption !== 'combined' && (
@@ -1497,6 +1525,9 @@ export function OddsAnalysis() {
                       dot={{ fill: '#a855f7', strokeWidth: 2, r: 4 }}
                       activeDot={{ r: 6, stroke: '#a855f7', strokeWidth: 2, fill: '#7c3aed' }}
                       strokeDasharray="0"
+                      isAnimationActive={true}
+                      animationDuration={350}
+                      animationEasing="ease-out"
                     />
                   )}
 

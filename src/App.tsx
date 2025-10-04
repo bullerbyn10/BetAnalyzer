@@ -6,6 +6,7 @@ import { AuthPage } from './components/AuthPage'
 import { ValueScanner } from './components/ValueScanner'
 import { PlayerProps } from './components/PlayerProps'
 import logo from 'figma:asset/2baabe9337150f4abb4b142bfefb95f7c18beea9.png'
+import favicon from 'figma:asset/d2761638ecf9ec098786f2252b32e723fa1a6ef7.png'
 
 // Lazy load the heavy OddsAnalysis component
 const OddsAnalysis = lazy(() => import('./components/OddsAnalysis').then(module => ({ default: module.OddsAnalysis })))
@@ -16,6 +17,18 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Set page title and favicon
+    document.title = 'BetAnalyzer'
+    
+    // Update favicon
+    let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']")
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = favicon
+
     // Check for existing session
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
